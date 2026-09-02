@@ -1,0 +1,100 @@
+name: Run APK and record 60 seconds
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-and-record:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run APK in Android emulator and record screen
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: true
+          emulator-boot-timeout: 600
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: |
+            set -euo pipefail
+
+            APK="$GITHUB_WORKSPACE/app/ttt.apk"
+            OUT="$GITHUB_WORKSPACE/recording-60s.mp4"
+
+            echo "Installing APK: $APK"
+            adb install -r "$APK"
+
+            AAPT=""
+            for candidate in "$ANDROID_HOME"/build-tools/*/aapt; do
+              if [ -x "$candidate" ]; then
+                AAPT="$candidate"
+              fi
+            done
+
+            if [ -z "$AAPT" ]; then
+              echo "aapt not found in Android SDK build-tools"
+              exit 1
+            fi
+
+            PKG="$($AAPT dump badging "$APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -n1)"
+            LAUNCHABLE="$($AAPT dump badging "$APK" | sed -n "s/.*launchable-activity: name='\([^']*\)'.*/\1/p" | head -n1)"
+
+            if [ -z "$PKG" ]; then
+              echo "Could not detect package name from APK"
+              exit 1
+            fi
+
+            echo "Package: $PKG"
+            echo "Launchable activity: ${LAUNCHABLE:-auto-detected by monkey}"
+
+            adb shell settings put system screen_off_timeout 600000
+            adb shell input keyevent 82 || true
+            adb shell am force-stop "$PKG"
+            adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
+
+            echo "Waiting for the app UI..."
+            sleep 3
+
+            echo "Recording exactly 60 seconds..."
+            adb shell screenrecord --time-limit 60 --bit-rate 8000000 /sdcard/recording-60s.mp4
+
+            echo "Pulling recording..."
+            adb pull /sdcard/recording-60s.mp4 "$OUT"
+            test -s "$OUT"
+            ls -lh "$OUT"
+
+      - name: Upload 60-second recording
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-screen-recording-60s
+          path: recording-60s.mp4
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload emulator logs if recording fails
+        if: failure()
+        run: |
+          adb logcat -d > logcat.txt || true
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-debug-logs
+          path: logcat.txt
+          if-no-files-found: ignore
+          retention-days: 7
