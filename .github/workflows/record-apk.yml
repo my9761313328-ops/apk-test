@@ -1,56 +1,39 @@
-name: Run APK and record 60 seconds
+name: Run APK in emulator and record screen
 
 on:
   workflow_dispatch:
 
 jobs:
-  run-and-record:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Run APK in Android emulator and record screen
+      - name: Run APK and record 60 seconds
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          target: google_apis
           arch: x86_64
           profile: pixel_6
-          force-avd-creation: true
-          emulator-boot-timeout: 600
-          disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
           script: bash "$GITHUB_WORKSPACE/scripts/run-apk.sh"
 
       - name: Upload 60-second recording
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: apk-screen-recording-60s
           path: recording-60s.mp4
-          if-no-files-found: error
-          retention-days: 7
+          if-no-files-found: warn
 
-      - name: Collect emulator diagnostics on failure
-        if: failure()
-        run: |
-          adb devices || true
-          adb logcat -d > logcat.txt || true
-          ls -lh logcat.txt || true
-
-      - name: Upload failure logs
-        if: failure()
+      - name: Upload logcat
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: emulator-debug-logs
+          name: emulator-logcat
           path: logcat.txt
           if-no-files-found: ignore
-          retention-days: 7
