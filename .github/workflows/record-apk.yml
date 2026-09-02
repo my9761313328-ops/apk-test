@@ -32,10 +32,19 @@ jobs:
           script: |
             set -eu
 
-            APK="$GITHUB_WORKSPACE/app/ttt.apk"
             OUT="$GITHUB_WORKSPACE/recording-60s.mp4"
 
-            echo "Installing APK: $APK"
+            echo "Searching for APK in repository..."
+            APK="$(find "$GITHUB_WORKSPACE" -type f -name '*.apk' -print -quit)"
+
+            if [ -z "$APK" ]; then
+              echo "ERROR: No .apk file found in the repository."
+              find "$GITHUB_WORKSPACE" -maxdepth 3 -type f -print | sort
+              exit 1
+            fi
+
+            echo "Using APK: $APK"
+            ls -lh "$APK"
             adb install -r "$APK"
 
             AAPT=""
