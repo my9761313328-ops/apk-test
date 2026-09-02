@@ -28,64 +28,8 @@ jobs:
           force-avd-creation: true
           emulator-boot-timeout: 600
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: |
-            set -eu
-
-            OUT="$GITHUB_WORKSPACE/recording-60s.mp4"
-
-            echo "Searching for APK in repository..."
-            APK="$(find "$GITHUB_WORKSPACE" -type f -name 'ttt.apk' -print -quit)"
-            if [ -z "$APK" ]; then
-              APK="$(find "$GITHUB_WORKSPACE" -type f -name '*.apk' -print -quit)"
-            fi
-            if [ -z "$APK" ]; then
-              echo "ERROR: No .apk file found in the repository."
-              exit 1
-            fi
-
-            echo "Using APK: $APK"
-            ls -lh "$APK"
-            adb install -r "$APK"
-
-            AAPT=""
-            for candidate in "$ANDROID_HOME"/build-tools/*/aapt; do
-              if [ -x "$candidate" ]; then
-                AAPT="$candidate"
-              fi
-            done
-
-            if [ -z "$AAPT" ]; then
-              echo "aapt not found in Android SDK build-tools"
-              exit 1
-            fi
-
-            PKG="$($AAPT dump badging "$APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -n1)"
-            LAUNCHABLE="$($AAPT dump badging "$APK" | sed -n "s/.*launchable-activity: name='\([^']*\)'.*/\1/p" | head -n1)"
-
-            if [ -z "$PKG" ]; then
-              echo "Could not detect package name from APK"
-              exit 1
-            fi
-
-            echo "Package: $PKG"
-            echo "Launchable activity: ${LAUNCHABLE:-auto-detected by monkey}"
-
-            adb shell settings put system screen_off_timeout 600000
-            adb shell input keyevent 82 || true
-            adb shell am force-stop "$PKG"
-            adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
-
-            echo "Waiting for the app UI..."
-            sleep 3
-
-            echo "Recording exactly 60 seconds..."
-            adb shell screenrecord --time-limit 60 --bit-rate 8000000 /sdcard/recording-60s.mp4
-
-            echo "Pulling recording..."
-            adb pull /sdcard/recording-60s.mp4 "$OUT"
-            test -s "$OUT"
-            ls -lh "$OUT"
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash "$GITHUB_WORKSPACE/scripts/run-apk.sh"
 
       - name: Upload 60-second recording
         uses: actions/upload-artifact@v4
@@ -95,10 +39,12 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Upload emulator logs if recording fails
+      - name: Collect emulator diagnostics on failure
         if: failure()
         run: |
+          adb devices || true
           adb logcat -d > logcat.txt || true
+          ls -lh logcat.txt || true
 
       - name: Upload failure logs
         if: failure()
