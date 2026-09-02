@@ -43,9 +43,11 @@ sleep 3
 
 echo "Recording screen for 60 seconds..."
 rm -f "$GITHUB_WORKSPACE/recording-60s.mp4"
-"$ADB" shell screenrecord --bit-rate 8000000 --time-limit 60 /sdcard/recording-60s.mp4
-"$ADB" pull /sdcard/recording-60s.mp4 "$GITHUB_WORKSPACE/recording-60s.mp4"
-"$ADB" shell rm -f /sdcard/recording-60s.mp4
+DEVICE_OUT=/data/local/tmp/recording-60s.mp4
+"$ADB" shell rm -f "$DEVICE_OUT"
+"$ADB" shell screenrecord --bit-rate 8000000 --time-limit 60 "$DEVICE_OUT"
+"$ADB" pull "$DEVICE_OUT" "$GITHUB_WORKSPACE/recording-60s.mp4"
+"$ADB" shell rm -f "$DEVICE_OUT"
 
 # Save emulator logs for troubleshooting.
 "$ADB" logcat -d > "$GITHUB_WORKSPACE/logcat.txt" || true
