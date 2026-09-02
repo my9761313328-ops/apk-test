@@ -35,19 +35,12 @@ jobs:
             OUT="$GITHUB_WORKSPACE/recording-60s.mp4"
 
             echo "Searching for APK in repository..."
-            APK=""
-            while IFS= read -r candidate; do
-              case "$candidate" in
-                */ttt.apk) APK="$candidate"; break ;;
-                *) if [ -z "$APK" ]; then APK="$candidate"; fi ;;
-              esac
-            done <<EOF
-$(find "$GITHUB_WORKSPACE" -type f -name '*.apk' -print)
-EOF
-
+            APK="$(find "$GITHUB_WORKSPACE" -type f -name 'ttt.apk' -print -quit)"
+            if [ -z "$APK" ]; then
+              APK="$(find "$GITHUB_WORKSPACE" -type f -name '*.apk' -print -quit)"
+            fi
             if [ -z "$APK" ]; then
               echo "ERROR: No .apk file found in the repository."
-              find "$GITHUB_WORKSPACE" -maxdepth 4 -type f -print | sort
               exit 1
             fi
 
